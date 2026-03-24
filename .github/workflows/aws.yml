@@ -1,0 +1,112 @@
+name: Deploy to Amazon ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: demo-chatbox
+  ECS_CLUSTER: demo
+  ECS_SERVICE: demo
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy Next.js (my-app)
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: my-app-${{ github.sha }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PG_HOST: ${{ secrets.PG_HOST }}
+          PG_PORT: ${{ secrets.PG_PORT }}
+          PG_USERNAME: ${{ secrets.PG_USERNAME }}
+          PG_PASSWORD: ${{ secrets.PG_PASSWORD }}
+          PG_DATABASE: ${{ secrets.PG_DATABASE }}
+          PG_SSL: ${{ secrets.PG_SSL }}
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+
+        run: |
+          set -euo pipefail
+
+          CONFIG_FILE="$RUNNER_TEMP/app.env"
+
+          {
+            printf 'NODE_ENV="production"\n'
+            printf 'GEMINI_API_KEY="%s"\n' "$GEMINI_API_KEY"
+            printf 'PG_HOST="%s"\n' "$PG_HOST"
+            printf 'PG_PORT="%s"\n' "${PG_PORT:-5432}"
+            printf 'PG_USERNAME="%s"\n' "$PG_USERNAME"
+            printf 'PG_PASSWORD="%s"\n' "$PG_PASSWORD"
+            printf 'PG_DATABASE="%s"\n' "$PG_DATABASE"
+            printf 'PG_SSL="%s"\n' "${PG_SSL:-}"
+            printf 'NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="%s"\n' "$NEXT_SERVER_ACTIONS_ENCRYPTION_KEY"
+          } > "$CONFIG_FILE"
+
+          DOCKER_BUILDKIT=1 docker build \
+            --secret id=app_env,src="$CONFIG_FILE" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -f Dockerfile .
+
+          rm -f "$CONFIG_FILE"
+
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare ECS task definition
+        env:
+          TASK_DEF_JSON: ${{ secrets.ECS_TASK_DEFINITION_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TASK_DEF_JSON:-}" ]; then
+            printf '%s\n' "$TASK_DEF_JSON" > "$RUNNER_TEMP/ecs-task.json"
+            echo "ECS_TASK_DEFINITION=$RUNNER_TEMP/ecs-task.json" >> "$GITHUB_ENV"
+          else
+            rel="${{ vars.ECS_TASK_DEFINITION_FILE }}"
+            [ -z "$rel" ] && rel="task.json"
+            echo "ECS_TASK_DEFINITION=${GITHUB_WORKSPACE}/$rel" >> "$GITHUB_ENV"
+          fi
+          cn="${{ vars.ECS_CONTAINER_NAME }}"
+          [ -z "$cn" ] && cn="demo"
+          echo "CONTAINER_NAME=$cn" >> "$GITHUB_ENV"
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

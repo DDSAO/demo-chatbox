@@ -1,0 +1,1 @@
+ALTER TABLE "demo"."chat" ADD COLUMN "raw_response" jsonb;

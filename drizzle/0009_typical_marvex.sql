@@ -1,0 +1,1 @@
+ALTER TABLE "demo"."chat" ADD COLUMN "deleted_at" integer;

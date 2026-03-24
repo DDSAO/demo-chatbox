@@ -1,0 +1,22 @@
+# Dependencies & build output
+node_modules
+.next
+
+# Git & editor
+.git
+.gitignore
+.cursor
+*.md
+!README.md
+
+# Env & local secrets (inject at runtime in ECS task definition)
+.env
+.env.*
+!.env.example
+
+# Tests & tooling (not needed for production image)
+coverage
+*.log
+
+# OS
+.DS_Store

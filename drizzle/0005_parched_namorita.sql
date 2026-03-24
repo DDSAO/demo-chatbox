@@ -1,0 +1,1 @@
+ALTER TABLE "demo"."chat" ALTER COLUMN "raw_response" SET DATA TYPE text;

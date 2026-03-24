@@ -1,0 +1,1 @@
+ALTER TABLE "demo"."chat" DROP COLUMN "raw_response";
