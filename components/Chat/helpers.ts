@@ -1,5 +1,27 @@
 import { ChatRole } from "@/lib/ai";
 
+/**
+ * Browser-safe UUID for React keys. `crypto.randomUUID()` is missing on HTTP
+ * (non-secure contexts) and some older browsers; `getRandomValues` is wider.
+ */
+export function clientRandomUuid(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    b[6] = (b[6]! & 0x0f) | 0x40;
+    b[8] = (b[8]! & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 /** Row shape for client chat state; matches {@link ChatMessage} in `chat.tsx`. */
 export type ChatStreamRow = {
   id: string;

@@ -5,7 +5,7 @@ import { ChatRole, Model } from "@/lib/ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AssistantMessageItem } from "./AssistantMessageItem";
 import { UserMessageItem } from "./UserMessageItem";
-import { pumpGeminiChatStream } from "./helpers";
+import { clientRandomUuid, pumpGeminiChatStream } from "./helpers";
 
 export type ChatMessage = {
   id: string;
@@ -39,8 +39,8 @@ export function Chat() {
       const trimmed = text.trim();
       if (trimmed === "" || isStreaming) return;
 
-      const userPendingId = `pending-user-${crypto.randomUUID()}`;
-      const assistantPendingId = `pending-assistant-${crypto.randomUUID()}`;
+      const userPendingId = `pending-user-${clientRandomUuid()}`;
+      const assistantPendingId = `pending-assistant-${clientRandomUuid()}`;
       const userMessageIdForRollback = { current: userPendingId };
 
       setIsStreaming(true);
@@ -79,7 +79,7 @@ export function Chat() {
           return [
             ...rest,
             {
-              id: `error-${crypto.randomUUID()}`,
+              id: `error-${clientRandomUuid()}`,
               role: ChatRole.Assistant,
               content: message,
             },
@@ -109,7 +109,7 @@ export function Chat() {
       const idx = snapshot.findIndex((m) => m.id === id);
       if (idx === -1) return;
 
-      const assistantPendingId = `pending-assistant-${crypto.randomUUID()}`;
+      const assistantPendingId = `pending-assistant-${clientRandomUuid()}`;
       const userMessageIdForRollback = { current: id };
 
       setIsStreaming(true);
@@ -147,7 +147,7 @@ export function Chat() {
         setMessages([
           ...snapshot,
           {
-            id: `error-${crypto.randomUUID()}`,
+            id: `error-${clientRandomUuid()}`,
             role: ChatRole.Assistant,
             content: message,
           },
